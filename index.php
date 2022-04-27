@@ -1,253 +1,256 @@
 <?php
-//require('./function.php');
-class Helpers
+
+class Template
 {
-    function errorsPage(int $n,array $error):array
+    /**
+     * @var array
+     */
+    private array $sessionData;
+
+    /**
+     * @param array $sessions
+     */
+    public function __construct(array $sessions = [])
     {
-        switch ($n)
-        {
-            case 1: $error[]="File template not exist";break;
-            case 2: $error[]="File template error parameter";break;
-            case 3: $error[]="Error form";break;
-            case 4: $error[]="Error String fields length  must be 3 or more";break;
-
-
-        }
-        return $error;
+        $this->sessionData = $sessions;
     }
 
-    function defineVar(string $tpl):?array
+    /**
+     * @param string $content_view
+     * @param string $template_view
+     * @param array $data
+     * @param string $error
+     * @return string
+     */
+    function viewTemplate(string $content_view, string $template_view, array $data, string $error = ""): string
     {
-        if (substr_count($tpl,'%')%2!==0) return null;
-        $arrStr=[];
-        $newArr=[];
-        if ($tpl==="") return $arrStr;
-        $arrStr=explode(" ",$tpl);
-        foreach($arrStr as $key => $value)
-        {
-            if (substr_count($value,'%')===0)
-            {
-                unset($arrStr[$key]);
+        ob_start();
+        include 'view/' . $content_view;
+        $content = ob_get_contents();
+        ob_end_clean();
 
-            }
-            elseif (substr_count($value,'%')>2)
-            {
-                $countp=0;
-                for($i=0;$i<strlen($value);$i++)
-                {
-                    if ($value[$i]==='%')  {$arrayN[]=$i;}
-                }
-
-                for($i=0;$i<count($arrayN);$i=$i+2)
-                {
-                    $newArr[]=substr($value,$arrayN[$i],$arrayN[$i+1]-$arrayN[$i]+1);
-                }
-                unset($arrStr[$key]);
-            }
-        }
-        $arrStr=array_merge($arrStr,$newArr);
-        foreach($arrStr as $key=>$value)
-        {
-            $begin=strpos($arrStr[$key],'%');
-            $end=strrpos($arrStr[$key],'%');
-            $arrStr[$key]=substr($arrStr[$key],$begin+1,$end-$begin-1);
-
-        }
-        $arrStr=array_unique($arrStr);
-        return $arrStr;
+        ob_start();
+        include 'view/' . $template_view;
+        $buf = ob_get_contents();
+        ob_end_clean();
+        return $buf;
     }
 
-    function validatePost(array $arr,$err):array
+    /**
+     * @return string
+     */
+    public function dateEndDefine(): string
     {
-        foreach($arr as $value)
-        {
-            if (isset($_POST[$value])){
-                if ((substr_count($value,"NUM")===0)&&(strlen($_POST[$value])<3))
-                {
-                    $err=Helpers::errorsPage(4,$err);
-                }
-            }
-            else {$err=Helpers::errorsPage(3,$err);}
-        }
-        return $err;
-    }
-//function define end date
-    function dateEnd():string
-    {
-        $endDate='ENDDATE';
-        if (isset($_SESSION['MONTHNUM']))
-        {
-            $dateE=strtotime('+'.$_SESSION['MONTHNUM'].' MONTH', strtotime(date('Y-m-d H:i:s')));
-            $endDate=date('jS \of F Y',$dateE);
+        if (isset($this->sessionData['MONTHNUM'])) {
+            $dateE = strtotime('+' . $this->sessionData['MONTHNUM'] . ' MONTH', strtotime(date('Y-m-d H:i:s')));
+            $endDate = date('jS \of F Y', $dateE);
         }
         return $endDate;
     }
-//function put date from massive to str
-    function ParseStr(string $selector,string $str,array $massive):string
-    {
-        $arr=explode($selector,$str);
 
-        foreach($arr as $key=>$value)
-        {
-            if (isset($massive[$value]))
-            {
-                $arr[$key]=$massive[$value];
-            }
+    /**
+     * @param string $selector
+     * @param string $str
+     * @param array $arrayVar
+     * @return string
+     */
+    public function parseTemplate(string $selector, string $str, array $arrayVar): string
+    {
+        foreach ($arrayVar as $key => $value) {
+            $pattern = '/' . $selector . $key . $selector . '/';
+            $str = preg_replace($pattern, $value, $str);
         }
-        $str=implode($arr);
         return $str;
     }
 
-}
-$err=[];
-class Template
-{
-    function view(string $content_view, string $template_view, $data, $err1 = null): void
-    {
-        include 'view/' . $template_view;
-    }
-
-    public function get_data($arr)
-    {
-        return $arr;//55
-    }
-
-    public function generate_text($tpl)
+    /**
+     * @param string $tpl
+     * @return string
+     */
+    public function generateTextFromTemplate(string $tpl): string
     {
         //date
         $nowDate = date('jS \of F Y');
-        $endDate = Helpers::dateEnd();
+        $endDate = $this->dateEndDefine();
         $dateArray = ['EXECDATE' => $nowDate, 'ENDDATE' => $endDate];
-        $newTpl = Helpers::ParseStr('%', $tpl, $_SESSION);
-        $newTpl = Helpers::ParseStr('#', $newTpl, $dateArray);
+        $newTpl = $this->parseTemplate('%', $tpl, $_SESSION);
+        $newTpl = $this->parseTemplate('#', $newTpl, $dateArray);
         $newTpl = str_replace(array("\r\n", "\r", "\n"), '<br>', $newTpl);
         return $newTpl;
     }
 
-    public function get_error($err1)
-    {
-        return $err1;
-    }
+}
+
+Class FileErrorException extends Exception
+{
 
 }
 class Main
 {
-    const TEMPLATE = './template.tpl';
 
+    const TEMPLATE = './view/template.tpl';
+    /**
+     * @var array
+     */
     private array $postData;
     private array $sessionData;
 
-    function __constructor(array $post, array $sessions)
+    public function __construct(array $post = [], array $sessions = [])
     {
         $this->postData = $post;
         $this->sessionData = $sessions;
     }
-    public function readfile():string
+
+
+    /**
+     * @return string
+     * @throws ErrorException
+     */
+    public function readfile()
     {
         if (!file_exists(self::TEMPLATE)) {
-            //   $err = errorsPage(1, $err);
+            throw new ErrorException('File Error');
         }
-        $tpl = "";
-        if (count($err) === 0)
-            $tpl = file_get_contents(self::TEMPLATE);
-        return $tpl;
-    }
-    public function calculateTemplateVariables(string $template)
-    {
-        $arr=Helpers::defineVar($template);
-        return $arr;
-    }
-    public function isSessionHasVariables( $cVar, $mVar)
-    {
-        /* if (count($mVar) === 0) { return true;}
-         else return false;*/
-        return true;
-    }
-    public function loadTemplateVariablesRequed($arrVar,$err)
-    {
-        $rr = new Template();
-        //$data=$rr->get_data($arrVar);
-        //$err1=$rr->get_error($err);
-        $rr->view('form.php', 'template_view.php', $arrVar, $err);
-        echo "6666";
-    }
-    public function loadTemplateWithVariables($cVar,$mVar,$tpl)
-    {
-        $rr = new Template();
-        $text = $rr->generate_text($tpl);
-        $rr->view('text.php', 'template_view.php', $text);
 
+        return file_get_contents(self::TEMPLATE);
     }
-    public function main()
+
+    /**
+     * @param string $template
+     * @return array
+     */
+    public function parseTemplateVariables(string $template): array
     {
-//Helpers::defineVar();
-        $err=[];
-        $template = $this->readFile();
-        $calculateVariables = (array)$this->calculateTemplateVariables($template);
-print_r($calculateVariables);
-print_r($this->sessionData);
-        //  echo "555";
-        var_dump($this->isSessionHasVariables($calculateVariables, $err)) ;
-           if ($this->isSessionHasVariables($calculateVariables, $this->sessionData)) { echo "555";
-              // return $this->loadTemplateVariablesRequed($calculateVariables,$err);
-           } else { echo "444";
-            //   return $this->loadTemplateWithVariables($calculateVariables, $this->sessionData, $template);
-
-           }
-        return $calculateVariables[0];
-
+        preg_match_all("/\%(.*)\%/", $template, $array);
+        return $array[1];
     }
-    function old()
+
+    /**
+     * @param array $parseVariables
+     * @param array $sessionData
+     * @return bool\
+     */
+    public function isSessionHasVariables(array $parseVariables = [], array $sessionData = []): bool
     {
-        if (!file_exists('./template.tpl')) {
-            $err = Helpers::errorsPage(1, $err);
+        $parseVariablesCount = count($parseVariables);
+        $count = 0;
+        foreach ($parseVariables as $sessionItem) {
+            $count += isset($sessionData[$sessionItem]) ? 1 : 0;
         }
-        $tpl = "";
-        if (count($err) === 0)
+        return $parseVariablesCount === $count && $parseVariablesCount > 0;
+    }
 
-            $tpl = file_get_contents('./template.tpl');
+    /**
+     * @param array $arrVar
+     * @return string
+     */
+    public function loadTemplateVariablesRequired(array $arrVar, $err = ""): string
+    {
+        $page = new Template();
+        return $page->viewTemplate('form.php', 'template_view.php', $arrVar, $err);
+    }
 
-        session_start();
-        $arrVar = Helpers::defineVar($tpl);
-        if ($arrVar === null) $err = Helpers::errorsPage(2, $err);
+    /**
+     * @param array $sessionData
+     * @param string $tpl
+     * @return string
+     */
+    public function loadTemplateWithVariables(array $sessionData, string $tpl): string
+    {
+        $page = new Template($sessionData);
+        $text[] = $page->generateTextFromTemplate($tpl);
+        return $page->viewTemplate('text.php', 'template_view.php', $text);
+    }
 
-        if ((isset($_POST['destroy'])) && ($_POST['destroy'] === 'destroy')) {
-            foreach ($arrVar as $value) {
-                unset($_SESSION[$value]);
-            }
-            session_destroy();
-        } else {
-            if ((count($_SESSION) === 0) && (count($_POST) > 0)) {
-
-                $err = Helpers::validatePost($arrVar, $err);
-                if (count($err) === 0) {
-                    foreach ($arrVar as $value) {
-
-                        $_SESSION[$value] = $_POST[$value];
-                    }
+    /**
+     * @param array $postData
+     * @param array $parseVariables
+     * @return bool
+     */
+    public function validateForm(array $postData, array $parseVariables): bool
+    {
+        $countVar = 0;
+        $count = 0;
+        foreach ($parseVariables as $item) {
+            if (isset($postData[$item])) {
+                $countVar++;
+                if ((substr_count($item, "NUM") === 0) && (strlen($postData[$item]) > 3) && (strlen($postData[$item]) < 50)) {
+                    $count++;
+                }
+                if ((substr_count($item, "NUM") > 0) && (strlen($postData[$item]) > 0) && (strlen($postData[$item]) < 30) && (is_numeric($postData[$item]))) {
+                    $count++;
                 }
             }
         }
+        return ($count === $countVar);
+    }
 
-//form
-        if (count($_SESSION) === 0) {
-            $rr = new Template();
-            //$data=$rr->get_data($arrVar);
-            //$err1=$rr->get_error($err);
-            $rr->view('form.php', 'template_view.php', $arrVar, $err);
+    /**
+     * @return string
+     */
+    public function main(): string
+    {
+        try {
+            $template = $this->readFile(self::TEMPLATE);
+            $parseVariables = $this->parseTemplateVariables($template);
+            if (!$this->validateForm($this->postData, $parseVariables)) {
+                throw new ErrorException('Validate data error');
+            }
+
+            $this->updateSessions($this->postData, $parseVariables);
+            $this->destroySessions($this->postData, $parseVariables);
+
+            if (!$this->isSessionHasVariables($parseVariables, $this->sessionData)) {
+                return $this->loadTemplateVariablesRequired($parseVariables);
+            } else {
+                return $this->loadTemplateWithVariables($this->sessionData, $template);
+
+            }
+        } catch (Exception $exception) {
+            //  return $exception->getMessage();
+            return $this->loadTemplateVariablesRequired($parseVariables, $exception->getMessage());
         }
+        /*catch (FileErrorException $exception) {
+              return $exception->getMessage();
+           // return $this->loadTemplateVariablesRequired($parseVariables, $exception->getMessage());
+        }*/
+    }
 
-//output
-
-        if (count($_SESSION) > 0) {
-            $rr = new Template();
-            $text = $rr->generate_text($tpl);
-            $rr->view('text.php', 'template_view.php', $text);
-
+    /**
+     * @param array $postData
+     * @param array $parseVariables
+     * @return void
+     */
+    function updateSessions(array $postData, array $parseVariables): void
+    {
+        foreach ($parseVariables as $item) {
+            if (isset($postData[$item])) {
+                $this->sessionData[$item] = $postData[$item];
+                $_SESSION[$item] = $postData[$item];
+            }
         }
-    }}
+    }
+
+    /**
+     * @param array $postData
+     * @param array $parseVariables
+     * @return void
+     */
+    function destroySessions(array $postData, array $parseVariables): void
+    {
+        if (isset($postData['destroy'])) {
+            foreach ($parseVariables as $item) {
+                unset($_SESSION[$item]);
+                unset($this->sessionData[$item]);
+            }
+        }
+    }
+
+
+}
+
 session_start();
 echo (new Main($_POST, $_SESSION))->main();
-echo "gggg";
+
 
 
