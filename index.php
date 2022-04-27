@@ -81,10 +81,11 @@ class Template
 
 }
 
-Class FileErrorException extends Exception
+class FileErrorException extends Exception
 {
 
 }
+
 class Main
 {
 
